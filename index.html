@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>位置固定ARポスター</title>
+  <style>
+    body { 
+      margin: 0; 
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+    #video-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    #camera-feed {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    #ar-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      pointer-events: none;
+    }
+    #debug-info {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.85);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 1000;
+      font-size: 11px;
+      font-family: monospace;
+      max-width: 90%;
+    }
+    #button-panel {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.95);
+      color: white;
+      padding: 30px;
+      border-radius: 15px;
+      z-index: 2000;
+      text-align: center;
+      max-width: 80%;
+    }
+    .button {
+      padding: 15px 30px;
+      font-size: 16px;
+      background: #007AFF;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      margin: 10px;
+      display: block;
+      width: 100%;
+    }
+    .button:active {
+      background: #0051D5;
+    }
+    .button:disabled {
+      background: #666;
+      cursor: not-allowed;
+    }
+    .success {
+      color: #0f0;
+      margin: 10px 0;
+    }
+    .error {
+      color: #f00;
+      margin: 10px 0;
+    }
+    .ok { color: #0f0; }
+    .warn { color: #ff0; }
+    .err { color: #f00; }
+  </style>
+</head>
+<body>
+  
+  <div id="button-panel">
+    <h2>📱 ARの準備</h2>
+    <p id="status-message">ARを始めるには3つの許可が必要です</p>
+    
+    <button id="start-button" class="button" onclick="startCamera()">
+      1️⃣ カメラを起動
+    </button>
+    
+    <button id="gps-button" class="button" onclick="startGPS()" disabled>
+      2️⃣ 位置情報を取得
+    </button>
+    
+    <button id="gyro-button" class="button" onclick="requestGyro()" disabled>
+      3️⃣ ジャイロセンサーを有効化
+    </button>
+    
+    <button id="close-button" class="button" onclick="closePanel()" disabled style="background:#28a745;">
+      ✅ ARを開始
+    </button>
+  </div>
+  
+  <div id="video-container">
+    <video id="camera-feed" autoplay playsinline></video>
+  </div>
+  
+  <canvas id="ar-canvas"></canvas>
+  
+  <div id="debug-info">
+    <div><strong>📱 デバッグ情報</strong></div>
+    <div>GPS: <span id="gps-status">待機中</span></div>
+    <div>位置: <span id="position">--</span></div>
+    <div>方位: <span id="heading">--</span>°</div>
+    <div>画像: <span id="image-status">読込中</span></div>
+    <div>表示範囲: 10m</div>
+    <div>表示中: <span id="visible-count" class="warn">0</span>個</div>
+    <div>最寄り: <span id="nearest">--</span></div>
+  </div>
+
+  <script>
+    // 11箇所のポスター座標
+    const posters = [
+      {id: 1, lat: 35.683405, lon: 139.990764, height: 2.31},
+      {id: 2, lat: 35.683318, lon: 139.991631, height: 2.72},
+      {id: 3, lat: 35.683859, lon: 139.992339, height: 2.82},
+      {id: 4, lat: 35.68367, lon: 139.992507, height: 3.08},
+      {id: 5, lat: 35.683527, lon: 139.99281, height: 2.97},
+      {id: 6, lat: 35.683334, lon: 139.993424, height: 2.6},
+      {id: 7, lat: 35.683183, lon: 139.993729, height: 2.62},
+      {id: 8, lat: 35.683017, lon: 139.994095, height: 2.7},
+      {id: 9, lat: 35.682863, lon: 139.994352, height: 2.73},
+      {id: 10, lat: 35.682737, lon: 139.99467, height: 2.89},
+      {id: 11, lat: 35.682452, lon: 139.994843, height: 3.24}
+    ];
+
+    let userLat = null;
+    let userLon = null;
+    let heading = 0;
+    let canvas, ctx;
+    let posterImage = null;
+    let headingAvailable = false;
+    
+    // 表示距離（約10m以内）
+    const DISPLAY_RANGE = 0.0001;
+    
+    // カメラの視野角
+    const CAMERA_FOV = 70;
+    
+    // ポスター画像を読み込み
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      posterImage = img;
+      document.getElementById('image-status').innerHTML = '<span class="ok">OK</span>';
+    };
+    img.onerror = () => {
+      document.getElementById('image-status').innerHTML = '<span class="err">エラー</span>';
+    };
+    img.src = 'poster.jpg';
+    
+    // 距離計算
+    function calculateDistanceDegree(lat1, lon1, lat2, lon2) {
+      const dLat = lat2 - lat1;
+      const dLon = lon2 - lon1;
+      return Math.sqrt(dLat * dLat + dLon * dLon);
+    }
+    
+    function degreeToMeter(degree) {
+      return degree * 100000;
+    }
+    
+    // 方位角計算
+    function calculateBearing(lat1, lon1, lat2, lon2) {
+      const dLon = lon2 - lon1;
+      const dLat = lat2 - lat1;
+      const θ = Math.atan2(dLon, dLat);
+      return (θ * 180 / Math.PI + 360) % 360;
+    }
+
+    // ステップ1: カメラ起動
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: 1280, height: 720 }
+        });
+        const video = document.getElementById('camera-feed');
+        video.srcObject = stream;
+        
+        document.getElementById('start-button').innerHTML = '✅ カメラ起動完了';
+        document.getElementById('start-button').disabled = true;
+        document.getElementById('gps-button').disabled = false;
+        
+        showMessage('カメラが起動しました', 'success');
+        console.log('✓ カメラ起動');
+        
+        // Canvas初期化
+        canvas = document.getElementById('ar-canvas');
+        ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+      } catch (err) {
+        showMessage('カメラエラー: ' + err.message, 'error');
+        console.error('Camera error:', err);
+      }
+    }
+
+    // ステップ2: GPS起動
+    function startGPS() {
+      if (navigator.geolocation) {
+        navigator.geolocation.watchPosition((position) => {
+          userLat = position.coords.latitude;
+          userLon = position.coords.longitude;
+          document.getElementById('gps-status').innerHTML = '<span class="ok">OK</span>';
+          document.getElementById('position').textContent = 
+            `${userLat.toFixed(6)}, ${userLon.toFixed(6)}`;
+          updateDebugInfo();
+          
+          if (!document.getElementById('gps-button').disabled) {
+            document.getElementById('gps-button').innerHTML = '✅ 位置情報取得完了';
+            document.getElementById('gps-button').disabled = true;
+            document.getElementById('gyro-button').disabled = false;
+            showMessage('位置情報を取得しました', 'success');
+          }
+        }, (err) => {
+          document.getElementById('gps-status').innerHTML = '<span class="err">エラー</span>';
+          showMessage('GPS エラー: ' + err.message, 'error');
+          console.error('GPS error:', err);
+        }, { enableHighAccuracy: true, maximumAge: 0 });
+      }
+    }
+
+    // ステップ3: ジャイロセンサー許可を要求（iOS 13+対応）
+    async function requestGyro() {
+      if (typeof DeviceOrientationEvent !== 'undefined') {
+        
+        // iOS 13+ の場合、明示的に許可を要求
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+          try {
+            showMessage('ジャイロセンサーの許可を求めています...', 'success');
+            
+            const permission = await DeviceOrientationEvent.requestPermission();
+            
+            if (permission === 'granted') {
+              showMessage('ジャイロセンサーが有効になりました！', 'success');
+              document.getElementById('gyro-button').innerHTML = '✅ ジャイロセンサー有効化完了';
+              document.getElementById('gyro-button').disabled = true;
+              document.getElementById('close-button').disabled = false;
+              
+              startOrientation();
+              console.log('✓ ジャイロセンサー許可');
+            } else {
+              showMessage('⚠️ ジャイロセンサーが拒否されました。\n\niPhone設定:\n設定 > Safari > モーションと画面の向きのアクセス\nをオンにして、ページを再読み込みしてください。', 'error');
+              console.log('✗ ジャイロセンサー拒否');
+            }
+          } catch (err) {
+            showMessage('ジャイロセンサーエラー: ' + err.message + '\n\niPhone設定:\n設定 > Safari > モーションと画面の向きのアクセス\nを確認してください。', 'error');
+            console.error('Permission error:', err);
+          }
+        } else {
+          // Android などの場合（許可不要）
+          showMessage('ジャイロセンサーを起動しています...', 'success');
+          startOrientation();
+          document.getElementById('gyro-button').innerHTML = '✅ ジャイロセンサー有効化完了';
+          document.getElementById('gyro-button').disabled = true;
+          document.getElementById('close-button').disabled = false;
+        }
+      } else {
+        showMessage('このデバイスはジャイロセンサーに対応していません', 'error');
+      }
+    }
+
+    // ジャイロセンサーのイベントリスナーを設定
+    function startOrientation() {
+      // デバイスの絶対方位を取得
+      window.addEventListener('deviceorientationabsolute', (event) => {
+        if (event.absolute && event.alpha !== null) {
+          heading = 360 - event.alpha;
+          headingAvailable = true;
+          document.getElementById('heading').innerHTML = 
+            `<span class="ok">${Math.round(heading)}</span>`;
+        }
+      });
+      
+      // フォールバック（相対方位）
+      window.addEventListener('deviceorientation', (event) => {
+        if (event.alpha !== null && !headingAvailable) {
+          heading = 360 - event.alpha;
+          document.getElementById('heading').innerHTML = 
+            `<span class="warn">${Math.round(heading)}</span>`;
+        }
+      });
+      
+      // 3秒経っても方位が取得できない場合の警告
+      setTimeout(() => {
+        if (!headingAvailable && heading === 0) {
+          document.getElementById('heading').innerHTML = '<span class="err">取得失敗</span>';
+          showMessage('⚠️ 方位情報が取得できません。スマホを動かしてみてください。', 'error');
+        }
+      }, 3000);
+    }
+
+    // パネルを閉じてARを開始
+    function closePanel() {
+      document.getElementById('button-panel').style.display = 'none';
+      startAR();
+    }
+
+    // メッセージ表示
+    function showMessage(message, type) {
+      const statusElem = document.getElementById('status-message');
+      statusElem.textContent = message;
+      statusElem.className = type;
+    }
+
+    // AR描画ループ
+    function startAR() {
+      function draw() {
+        if (!userLat || !userLon || !posterImage) {
+          requestAnimationFrame(draw);
+          return;
+        }
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        let visibleCount = 0;
+
+        // 全てのポスターをチェック
+        posters.forEach(poster => {
+          const distanceDeg = calculateDistanceDegree(userLat, userLon, poster.lat, poster.lon);
+          
+          // 表示距離内かチェック
+          if (distanceDeg > DISPLAY_RANGE) return;
+          
+          const bearing = calculateBearing(userLat, userLon, poster.lat, poster.lon);
+          
+          // スマホの向きとポスターの方角の差を計算
+          let angleDiff = bearing - heading;
+          if (angleDiff > 180) angleDiff -= 360;
+          if (angleDiff < -180) angleDiff += 360;
+
+          // カメラの視野角内にあるかチェック
+          const halfFOV = CAMERA_FOV / 2;
+          if (Math.abs(angleDiff) < halfFOV) {
+            visibleCount++;
+            
+            // 画面上の座標を計算
+            const screenX = centerX + (angleDiff / halfFOV) * (canvas.width / 2);
+            
+            // 距離に応じたスケール
+            const minScale = 0.5;
+            const maxScale = 3.0;
+            const scale = Math.max(minScale, Math.min(maxScale, (DISPLAY_RANGE * 0.8) / distanceDeg));
+            
+            // ポスターサイズ
+            const posterWidth = 150 * scale;
+            const posterHeight = 225 * scale;
+            
+            // 高さの計算
+            const eyeHeight = 1.6;
+            const posterCenterHeight = poster.height;
+            const distanceM = degreeToMeter(distanceDeg);
+            const heightDiff = posterCenterHeight - eyeHeight;
+            const verticalAngle = Math.atan2(heightDiff, distanceM) * 180 / Math.PI;
+            const screenY = centerY - (verticalAngle / 30) * canvas.height / 2;
+            
+            // ポスター画像を描画
+            ctx.save();
+            const opacity = Math.max(0.8, Math.min(1.0, scale / 2.0));
+            ctx.globalAlpha = opacity;
+            
+            ctx.drawImage(posterImage, 
+              screenX - posterWidth / 2, 
+              screenY - posterHeight / 2, 
+              posterWidth, 
+              posterHeight
+            );
+            
+            // デバッグ用の番号と距離
+            ctx.globalAlpha = 1.0;
+            ctx.fillStyle = '#FFFF00';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 4;
+            const text = `${poster.id} (${Math.round(distanceM)}m)`;
+            ctx.strokeText(text, screenX, screenY - posterHeight/2 - 10);
+            ctx.fillText(text, screenX, screenY - posterHeight/2 - 10);
+            
+            ctx.restore();
+          }
+        });
+
+        // 表示中のカウントを更新
+        const countElem = document.getElementById('visible-count');
+        countElem.textContent = visibleCount;
+        countElem.className = visibleCount > 0 ? 'ok' : 'warn';
+
+        requestAnimationFrame(draw);
+      }
+
+      draw();
+    }
+
+    function updateDebugInfo() {
+      if (!userLat || !userLon) return;
+
+      let nearest = null;
+      let minDistance = Infinity;
+
+      posters.forEach(poster => {
+        const distanceDeg = calculateDistanceDegree(userLat, userLon, poster.lat, poster.lon);
+        if (distanceDeg < minDistance) {
+          minDistance = distanceDeg;
+          nearest = poster;
+        }
+      });
+
+      if (nearest) {
+        const distanceM = degreeToMeter(minDistance);
+        const inRange = minDistance < DISPLAY_RANGE;
+        document.getElementById('nearest').innerHTML = 
+          `ポスター${nearest.id} - ${distanceM.toFixed(0)}m <span class="${inRange ? 'ok' : 'warn'}">(${inRange ? '範囲内' : '範囲外'})</span>`;
+      }
+    }
+
+    // リサイズ対応
+    window.addEventListener('resize', () => {
+      if (canvas) {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+    });
+  </script>
+</body>
+</html>
