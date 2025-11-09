@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>位置固定ARポスター</title>
+  <title>位置固定ARポスター（安定版）</title>
   <style>
     body { 
       margin: 0; 
@@ -120,31 +120,35 @@
   <canvas id="ar-canvas"></canvas>
   
   <div id="debug-info">
-    <div><strong>📱 デバッグ情報</strong></div>
+    <div><strong>📱 デバッグ情報（安定版）</strong></div>
     <div>GPS: <span id="gps-status">待機中</span></div>
     <div>位置: <span id="position">--</span></div>
     <div>方位: <span id="heading">--</span>°</div>
     <div>画像: <span id="image-status">読込中</span></div>
-    <div>表示範囲: 10m</div>
+    <div>表示範囲: 20m</div>
     <div>表示中: <span id="visible-count" class="warn">0</span>個</div>
-    <div>最寄り: <span id="nearest">--</span></div>
+    <div style="margin-top: 5px; color: #FF9500;">--- ID 13/14 デバッグ ---</div>
+    <div style="color: #FF9500;">ID13距離: <span id="dist-13">--</span>m</div>
+    <div style="color: #FF9500;">ID14距離: <span id="dist-14">--</span>m</div>
   </div>
 
   <script>
     // 12箇所のポスター座標
     const posters = [
-      {id: 1, lat: 35.683405, lon: 139.990764, height: 2.31},
-      {id: 2, lat: 35.683318, lon: 139.991631, height: 2.72},
-      {id: 3, lat: 35.683859, lon: 139.992339, height: 2.82},
-      {id: 4, lat: 35.68367, lon: 139.992507, height: 3.08},
-      {id: 5, lat: 35.683527, lon: 139.99281, height: 2.97},
-      {id: 6, lat: 35.683334, lon: 139.993424, height: 2.6},
-      {id: 7, lat: 35.683183, lon: 139.993729, height: 2.62},
-      {id: 8, lat: 35.683017, lon: 139.994095, height: 2.7},
-      {id: 9, lat: 35.682863, lon: 139.994352, height: 2.73},
-      {id: 10, lat: 35.682737, lon: 139.99467, height: 2.89},
-      {id: 11, lat: 35.682452, lon: 139.994843, height: 3.24},
-      {id: 12, lat: 35.683629, lon: 139.992651, height: 4.00}
+      {id: 1, lat: 35.683405, lon: 139.990764, height: 2.31, facing: 90},
+      {id: 2, lat: 35.683318, lon: 139.991631, height: 2.72, facing: 90},
+      {id: 3, lat: 35.683859, lon: 139.992339, height: 2.82, facing: 180},
+      {id: 4, lat: 35.68367, lon: 139.992507, height: 3.08, facing: 90},
+      {id: 5, lat: 35.683527, lon: 139.99281, height: 2.97, facing: 90},
+      {id: 6, lat: 35.683334, lon: 139.993424, height: 2.6, facing: 90},
+      {id: 7, lat: 35.683183, lon: 139.993729, height: 2.62, facing: 90},
+      {id: 8, lat: 35.683017, lon: 139.994095, height: 2.7, facing: 90},
+      {id: 9, lat: 35.682863, lon: 139.994352, height: 2.73, facing: 90},
+      {id: 10, lat: 35.682737, lon: 139.99467, height: 2.89, facing: 90},
+      {id: 11, lat: 35.682452, lon: 139.994843, height: 3.24, facing: 0},
+      {id: 12, lat: 35.683629, lon: 139.992651, height: 4.00, facing: null},
+      {id: 13, lat: 35.69427777589021, lon: 139.76159867429124, height: 10.00, facing: null},
+      {id: 14, lat: 35.69432243174469, lon: 139.76166640019622, height: 2.00, facing: null}
     ];
 
     let userLat = null;
@@ -154,10 +158,18 @@
     let posterImage = null;
     let headingAvailable = false;
     
-    // 表示距離（約50m以内）
-    const DISPLAY_RANGE = 0.0005;
+    // スムージング用の変数
+    let smoothedLat = null;
+    let smoothedLon = null;
+    let smoothedHeading = null;
+    let headingHistory = [];
+    let positionHistory = [];
     
-    // カメラの視野角
+    // スムージングの設定
+    const HEADING_HISTORY_SIZE = 5;  // 方位の移動平均に使うサンプル数
+    const POSITION_HISTORY_SIZE = 3; // 位置の移動平均に使うサンプル数
+    
+    const DISPLAY_RANGE = 0.0002;  // 約20m以内
     const CAMERA_FOV = 70;
     
     // ポスター画像を読み込み
@@ -190,6 +202,52 @@
       const θ = Math.atan2(dLon, dLat);
       return (θ * 180 / Math.PI + 360) % 360;
     }
+    
+    // 方位のスムージング（角度の特性を考慮した移動平均）
+    function smoothHeading(newHeading) {
+      headingHistory.push(newHeading);
+      if (headingHistory.length > HEADING_HISTORY_SIZE) {
+        headingHistory.shift();
+      }
+      
+      if (headingHistory.length === 1) {
+        smoothedHeading = newHeading;
+        return smoothedHeading;
+      }
+      
+      // 角度の平均を計算（円周上の平均）
+      let sumSin = 0;
+      let sumCos = 0;
+      headingHistory.forEach(h => {
+        sumSin += Math.sin(h * Math.PI / 180);
+        sumCos += Math.cos(h * Math.PI / 180);
+      });
+      
+      const avgHeading = Math.atan2(sumSin, sumCos) * 180 / Math.PI;
+      smoothedHeading = (avgHeading + 360) % 360;
+      
+      return smoothedHeading;
+    }
+    
+    // 位置のスムージング（移動平均）
+    function smoothPosition(newLat, newLon) {
+      positionHistory.push({lat: newLat, lon: newLon});
+      if (positionHistory.length > POSITION_HISTORY_SIZE) {
+        positionHistory.shift();
+      }
+      
+      let sumLat = 0;
+      let sumLon = 0;
+      positionHistory.forEach(pos => {
+        sumLat += pos.lat;
+        sumLon += pos.lon;
+      });
+      
+      smoothedLat = sumLat / positionHistory.length;
+      smoothedLon = sumLon / positionHistory.length;
+      
+      return {lat: smoothedLat, lon: smoothedLon};
+    }
 
     // ステップ1: カメラ起動
     async function startCamera() {
@@ -205,9 +263,7 @@
         document.getElementById('gps-button').disabled = false;
         
         showMessage('カメラが起動しました', 'success');
-        console.log('✓ カメラ起動');
         
-        // Canvas初期化
         canvas = document.getElementById('ar-canvas');
         ctx = canvas.getContext('2d');
         canvas.width = window.innerWidth;
@@ -215,7 +271,6 @@
         
       } catch (err) {
         showMessage('カメラエラー: ' + err.message, 'error');
-        console.error('Camera error:', err);
       }
     }
 
@@ -225,30 +280,36 @@
         navigator.geolocation.watchPosition((position) => {
           userLat = position.coords.latitude;
           userLon = position.coords.longitude;
+          
+          // 位置のスムージング
+          smoothPosition(userLat, userLon);
+          
           document.getElementById('gps-status').innerHTML = '<span class="ok">OK</span>';
           document.getElementById('position').textContent = 
-            `${userLat.toFixed(6)}, ${userLon.toFixed(6)}`;
-          updateDebugInfo();
+            `${smoothedLat.toFixed(6)}, ${smoothedLon.toFixed(6)}`;
           
-          if (!document.getElementById('gps-button').disabled) {
-            document.getElementById('gps-button').innerHTML = '✅ 位置情報取得完了';
-            document.getElementById('gps-button').disabled = true;
+          const gpsButton = document.getElementById('gps-button');
+          if (!gpsButton.disabled) {
+            gpsButton.innerHTML = '✅ 位置情報取得完了';
+            gpsButton.disabled = true;
             document.getElementById('gyro-button').disabled = false;
             showMessage('位置情報を取得しました', 'success');
           }
         }, (err) => {
           document.getElementById('gps-status').innerHTML = '<span class="err">エラー</span>';
           showMessage('GPS エラー: ' + err.message, 'error');
-          console.error('GPS error:', err);
-        }, { enableHighAccuracy: true, maximumAge: 0 });
+        }, { 
+          enableHighAccuracy: true, 
+          maximumAge: 0,
+          timeout: 10000
+        });
       }
     }
 
-    // ステップ3: ジャイロセンサー許可を要求（iOS 13+対応）
+    // ステップ3: ジャイロセンサー許可を要求
     async function requestGyro() {
       if (typeof DeviceOrientationEvent !== 'undefined') {
         
-        // iOS 13+ の場合、明示的に許可を要求
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
           try {
             showMessage('ジャイロセンサーの許可を求めています...', 'success');
@@ -262,54 +323,47 @@
               document.getElementById('close-button').disabled = false;
               
               startOrientation();
-              console.log('✓ ジャイロセンサー許可');
             } else {
-              showMessage('⚠️ ジャイロセンサーが拒否されました。\n\niPhone設定:\n設定 > Safari > モーションと画面の向きのアクセス\nをオンにして、ページを再読み込みしてください。', 'error');
-              console.log('✗ ジャイロセンサー拒否');
+              showMessage('⚠️ ジャイロセンサーが拒否されました。', 'error');
             }
           } catch (err) {
-            showMessage('ジャイロセンサーエラー: ' + err.message + '\n\niPhone設定:\n設定 > Safari > モーションと画面の向きのアクセス\nを確認してください。', 'error');
-            console.error('Permission error:', err);
+            showMessage('ジャイロセンサーエラー: ' + err.message, 'error');
           }
         } else {
-          // Android などの場合（許可不要）
           showMessage('ジャイロセンサーを起動しています...', 'success');
           startOrientation();
           document.getElementById('gyro-button').innerHTML = '✅ ジャイロセンサー有効化完了';
           document.getElementById('gyro-button').disabled = true;
           document.getElementById('close-button').disabled = false;
         }
-      } else {
-        showMessage('このデバイスはジャイロセンサーに対応していません', 'error');
       }
     }
 
     // ジャイロセンサーのイベントリスナーを設定
     function startOrientation() {
-      // デバイスの絶対方位を取得
       window.addEventListener('deviceorientationabsolute', (event) => {
         if (event.absolute && event.alpha !== null) {
-          heading = 360 - event.alpha;
+          const rawHeading = 360 - event.alpha;
+          heading = smoothHeading(rawHeading);
           headingAvailable = true;
           document.getElementById('heading').innerHTML = 
-            `<span class="ok">${Math.round(heading)}</span>`;
+            `<span class="ok">${Math.round(smoothedHeading)}</span>`;
         }
       });
       
-      // フォールバック（相対方位）
       window.addEventListener('deviceorientation', (event) => {
         if (event.alpha !== null && !headingAvailable) {
-          heading = 360 - event.alpha;
+          const rawHeading = 360 - event.alpha;
+          heading = smoothHeading(rawHeading);
           document.getElementById('heading').innerHTML = 
-            `<span class="warn">${Math.round(heading)}</span>`;
+            `<span class="warn">${Math.round(smoothedHeading)}</span>`;
         }
       });
       
-      // 3秒経っても方位が取得できない場合の警告
       setTimeout(() => {
-        if (!headingAvailable && heading === 0) {
+        if (!headingAvailable && (smoothedHeading === null || smoothedHeading === 0)) {
           document.getElementById('heading').innerHTML = '<span class="err">取得失敗</span>';
-          showMessage('⚠️ 方位情報が取得できません。スマホを動かしてみてください。', 'error');
+          showMessage('⚠️ 方位情報が取得できません。', 'error');
         }
       }, 3000);
     }
@@ -330,7 +384,7 @@
     // AR描画ループ
     function startAR() {
       function draw() {
-        if (!userLat || !userLon || !posterImage) {
+        if (!smoothedLat || !smoothedLon || !posterImage || smoothedHeading === null) {
           requestAnimationFrame(draw);
           return;
         }
@@ -341,38 +395,62 @@
         const centerY = canvas.height / 2;
         let visibleCount = 0;
 
-        // 全てのポスターをチェック
+        // スムージングされた位置と方位を使用
+        const currentLat = smoothedLat;
+        const currentLon = smoothedLon;
+        const currentHeading = smoothedHeading;
+
+        // id13とid14までの距離を計算（デバッグ用）
+        const poster13 = posters.find(p => p.id === 13);
+        const poster14 = posters.find(p => p.id === 14);
+        
+        if (poster13) {
+          const dist13 = degreeToMeter(calculateDistanceDegree(currentLat, currentLon, poster13.lat, poster13.lon));
+          document.getElementById('dist-13').textContent = Math.round(dist13);
+        }
+        
+        if (poster14) {
+          const dist14 = degreeToMeter(calculateDistanceDegree(currentLat, currentLon, poster14.lat, poster14.lon));
+          document.getElementById('dist-14').textContent = Math.round(dist14);
+        }
+
         posters.forEach(poster => {
-          const distanceDeg = calculateDistanceDegree(userLat, userLon, poster.lat, poster.lon);
+          const distanceDeg = calculateDistanceDegree(currentLat, currentLon, poster.lat, poster.lon);
           
-          // 表示距離内かチェック
           if (distanceDeg > DISPLAY_RANGE) return;
           
-          const bearing = calculateBearing(userLat, userLon, poster.lat, poster.lon);
+          const bearing = calculateBearing(currentLat, currentLon, poster.lat, poster.lon);
           
-          // スマホの向きとポスターの方角の差を計算
-          let angleDiff = bearing - heading;
+          let angleDiff = bearing - currentHeading;
           if (angleDiff > 180) angleDiff -= 360;
           if (angleDiff < -180) angleDiff += 360;
 
-          // カメラの視野角内にあるかチェック
           const halfFOV = CAMERA_FOV / 2;
           if (Math.abs(angleDiff) < halfFOV) {
             visibleCount++;
             
-            // 画面上の座標を計算
             const screenX = centerX + (angleDiff / halfFOV) * (canvas.width / 2);
             
-            // 距離に応じたスケール
             const minScale = 0.5;
             const maxScale = 3.0;
-            const scale = Math.max(minScale, Math.min(maxScale, (DISPLAY_RANGE * 0.8) / distanceDeg));
+            let scale = Math.max(minScale, Math.min(maxScale, (DISPLAY_RANGE * 0.8) / distanceDeg));
             
-            // ポスターサイズ
+            // ポスターの向きによる調整
+            if (poster.facing !== null) {
+              let viewAngle = (bearing + 180) % 360;
+              let facingDiff = Math.abs(viewAngle - poster.facing);
+              if (facingDiff > 180) facingDiff = 360 - facingDiff;
+              
+              const visibilityFactor = Math.cos(facingDiff * Math.PI / 180);
+              
+              if (Math.abs(facingDiff) > 60) return;
+              
+              scale *= Math.abs(visibilityFactor);
+            }
+            
             const posterWidth = 150 * scale;
             const posterHeight = 225 * scale;
             
-            // 高さの計算
             const eyeHeight = 1.6;
             const posterCenterHeight = poster.height;
             const distanceM = degreeToMeter(distanceDeg);
@@ -380,7 +458,6 @@
             const verticalAngle = Math.atan2(heightDiff, distanceM) * 180 / Math.PI;
             const screenY = centerY - (verticalAngle / 30) * canvas.height / 2;
             
-            // ポスター画像を描画
             ctx.save();
             const opacity = Math.max(0.8, Math.min(1.0, scale / 2.0));
             ctx.globalAlpha = opacity;
@@ -406,7 +483,6 @@
           }
         });
 
-        // 表示中のカウントを更新
         const countElem = document.getElementById('visible-count');
         countElem.textContent = visibleCount;
         countElem.className = visibleCount > 0 ? 'ok' : 'warn';
@@ -415,28 +491,6 @@
       }
 
       draw();
-    }
-
-    function updateDebugInfo() {
-      if (!userLat || !userLon) return;
-
-      let nearest = null;
-      let minDistance = Infinity;
-
-      posters.forEach(poster => {
-        const distanceDeg = calculateDistanceDegree(userLat, userLon, poster.lat, poster.lon);
-        if (distanceDeg < minDistance) {
-          minDistance = distanceDeg;
-          nearest = poster;
-        }
-      });
-
-      if (nearest) {
-        const distanceM = degreeToMeter(minDistance);
-        const inRange = minDistance < DISPLAY_RANGE;
-        document.getElementById('nearest').innerHTML = 
-          `ポスター${nearest.id} - ${distanceM.toFixed(0)}m <span class="${inRange ? 'ok' : 'warn'}">(${inRange ? '範囲内' : '範囲外'})</span>`;
-      }
     }
 
     // リサイズ対応
