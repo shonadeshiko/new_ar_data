@@ -125,7 +125,7 @@
     <div>位置: <span id="position">--</span></div>
     <div>方位: <span id="heading">--</span>°</div>
     <div>画像: <span id="image-status">読込中</span></div>
-    <div>表示範囲: 50m</div>
+    <div>表示範囲: 20m</div>
     <div>表示中: <span id="visible-count" class="warn">0</span>個</div>
   </div>
 
@@ -153,8 +153,8 @@
     let posterImage = null;
     let headingAvailable = false;
     
-    // 表示距離（約50m以内）
-    const DISPLAY_RANGE = 0.0005;
+    // 表示距離（約20m以内）
+    const DISPLAY_RANGE = 0.0002;
     
     // カメラの視野角
     const CAMERA_FOV = 70;
