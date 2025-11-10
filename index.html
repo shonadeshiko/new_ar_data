@@ -125,7 +125,7 @@
     <div>位置: <span id="position">--</span></div>
     <div>方位: <span id="heading">--</span>°</div>
     <div>画像: <span id="image-status">読込中</span></div>
-    <div>表示範囲: 20m</div>
+    <div>表示範囲: 30m</div>
     <div>表示中: <span id="visible-count" class="warn">0</span>個</div>
     <div style="margin-top: 5px; color: #FF9500;">--- ID 13/14/15 デバッグ ---</div>
     <div style="color: #FF9500;">ID13距離: <span id="dist-13">--</span>m</div>
@@ -171,7 +171,7 @@
     const HEADING_HISTORY_SIZE = 5;  // 方位の移動平均に使うサンプル数
     const POSITION_HISTORY_SIZE = 3; // 位置の移動平均に使うサンプル数
     
-    const DISPLAY_RANGE = 0.0002;  // 約20m以内
+    const DISPLAY_RANGE = 0.0003;  // 約30m以内
     const CAMERA_FOV = 70;
     
     // ポスター画像を読み込み
