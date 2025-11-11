@@ -125,7 +125,7 @@
     <div>位置: <span id="position">--</span></div>
     <div>方位: <span id="heading">--</span>°</div>
     <div>画像: <span id="image-status">読込中</span></div>
-    <div>表示範囲: 20m</div>
+    <div>表示範囲: 30m</div>
     <div>表示中: <span id="visible-count" class="warn">0</span>個</div>
     <div style="margin-top: 5px; color: #FF9500;">--- ID 13/14/15 デバッグ ---</div>
     <div style="color: #FF9500;">ID13距離: <span id="dist-13">--</span>m</div>
@@ -136,21 +136,21 @@
   <script>
     // 12箇所のポスター座標
     const posters = [
-      {id: 1, lat: 35.683405, lon: 139.990764, height: 3.5, facing: 270},
-      {id: 2, lat: 35.68339638511535, lon: 139.9916010495432, height: 3.0, facing: 115},
-      {id: 3, lat: 35.683859, lon: 139.992339, height: 2.82, facing: 180},
-      {id: 4, lat: 35.683733261098965, lon: 139.9921829080896, height: 3.00, facing: 315},
-      {id: 5, lat: 35.6834128284039, lon: 139.99271517352076, height: 2.5, facing: 315},
+      {id: 1, lat: 35.683433, lon:  139.990745, height: 3.5, facing: 0},
+      {id: 2, lat: 35.683378, lon: 139.991608, height: 2.0, facing: 0},
+      {id: 3, lat: 35.683715, lon: 139.992265, height: 2.82, facing: 180},
+      {id: 4, lat: 35.6833621, lon: 139.992847, height: 2.00, facing: 315},
+      {id: 5, lat: 35.6834128284039, lon: 139.99271517352076, height: 5.5, facing: 0},
       {id: 6, lat: 35.683182908695876, lon: 139.9933211238243, height: 5.5, facing: 315},
       {id: 7, lat: 35.68303389035569, lon: 139.99362150270346, height: 5.5, facing: 315},
       {id: 8, lat: 35.68287023595939,  lon: 139.993966031626, height: 5.5, facing: 315},
       {id: 9, lat: 35.682720661114104, lon:  139.9942262253935, height: 5.5, facing: 315},
       {id: 10, lat: 35.68259716727719, lon: 139.99457674154323, height: 5.5, facing: 315},
       {id: 11, lat: 35.682452, lon: 139.994843, height: 2.8, facing: 300},
-      {id: 12, lat: 35.68362805998047, lon: 139.99265344682095, height: 6.5, facing: 0},
-      {id: 13, lat: 35.69427777589021, lon: 139.76159867429124, height: 10.00, facing: 90},
+      {id: 12, lat: 35.683590, lon: 139.992799, height: 5.5, facing: 225},
+      {id: 13, lat: 35.69432243174469, lon: 139.76166640019622, height: 5.5, facing: 90},
       {id: 14, lat: 35.69432243174469, lon: 139.76166640019622, height: 2.00, facing: 90},
-      {id: 15, lat: 35.72043293447479, lon: 139.7651745412272, height: 2.00, facing: 300}
+      {id: 15, lat: 35.683612038601055, lon: 139.98979916453789, height: 10.00, facing: null}
     ];
 
     let userLat = null;
@@ -171,7 +171,7 @@
     const HEADING_HISTORY_SIZE = 5;  // 方位の移動平均に使うサンプル数
     const POSITION_HISTORY_SIZE = 3; // 位置の移動平均に使うサンプル数
     
-    const DISPLAY_RANGE = 0.0002;  // 約20m以内
+    const DISPLAY_RANGE = 0.0003;  // 約30m以内
     const CAMERA_FOV = 70;
     
     // ポスター画像を読み込み
