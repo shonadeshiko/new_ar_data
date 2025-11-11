@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>マーカーベースAR - ポスター表示</title>
+  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    #instructions {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 15px 25px;
+      border-radius: 10px;
+      font-family: sans-serif;
+      font-size: 14px;
+      z-index: 1000;
+      text-align: center;
+      max-width: 80%;
+    }
+    #debug {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-family: monospace;
+      font-size: 11px;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+  
+  <div id="instructions">
+    📱 Hiroマーカーをカメラに向けてください<br>
+    <small>マーカーが検出されるとポスターが表示されます</small>
+  </div>
+  
+  <div id="debug">
+    <div><strong>📊 デバッグ情報</strong></div>
+    <div>マーカー検出: <span id="marker-status">待機中</span></div>
+  </div>
+
+  <a-scene
+    embedded
+    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+    vr-mode-ui="enabled: false"
+    renderer="logarithmicDepthBuffer: true; precision: medium;">
+    
+    <!-- Hiroマーカー -->
+    <a-marker 
+      preset="hiro"
+      id="hiro-marker"
+      raycaster="objects: .clickable"
+      emitevents="true"
+      cursor="fuse: false; rayOrigin: mouse;">
+      
+      <!-- ポスター画像を表示 -->
+      <a-image
+        src="poster.jpg"
+        position="0 0 0"
+        rotation="-90 0 0"
+        width="2"
+        height="3"
+        opacity="1">
+      </a-image>
+      
+      <!-- デバッグ用：マーカーの座標系を示す矢印 -->
+      <!-- X軸: 赤 -->
+      <a-entity
+        geometry="primitive: cylinder; radius: 0.01; height: 1"
+        material="color: red"
+        position="0.5 0 0"
+        rotation="0 0 90">
+      </a-entity>
+      
+      <!-- Y軸: 緑 -->
+      <a-entity
+        geometry="primitive: cylinder; radius: 0.01; height: 1"
+        material="color: green"
+        position="0 0.5 0">
+      </a-entity>
+      
+      <!-- Z軸: 青 -->
+      <a-entity
+        geometry="primitive: cylinder; radius: 0.01; height: 1"
+        material="color: blue"
+        position="0 0 0.5"
+        rotation="90 0 0">
+      </a-entity>
+      
+    </a-marker>
+
+    <!-- カメラ -->
+    <a-entity camera></a-entity>
+  </a-scene>
+
+  <script>
+    // マーカー検出イベント
+    const marker = document.querySelector('#hiro-marker');
+    const statusElem = document.getElementById('marker-status');
+    
+    marker.addEventListener('markerFound', () => {
+      console.log('マーカーが検出されました');
+      statusElem.textContent = '✅ 検出中';
+      statusElem.style.color = '#0f0';
+    });
+    
+    marker.addEventListener('markerLost', () => {
+      console.log('マーカーが見失われました');
+      statusElem.textContent = '❌ 未検出';
+      statusElem.style.color = '#f00';
+    });
+    
+    // 5秒後に説明を消す
+    setTimeout(() => {
+      const instructions = document.getElementById('instructions');
+      instructions.style.transition = 'opacity 1s';
+      instructions.style.opacity = '0';
+      setTimeout(() => {
+        instructions.style.display = 'none';
+      }, 1000);
+    }, 5000);
+  </script>
+</body>
+</html>
