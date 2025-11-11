@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>マーカーベースAR - ポスター表示</title>
+  <title>マーカーベースAR - カスタムマーカー</title>
   <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   <style>
@@ -43,7 +43,7 @@
 <body>
   
   <div id="instructions">
-    📱 Hiroマーカーをカメラに向けてください<br>
+    📱 カスタムマーカーをカメラに向けてください<br>
     <small>マーカーが検出されるとポスターが表示されます</small>
   </div>
   
@@ -58,10 +58,11 @@
     vr-mode-ui="enabled: false"
     renderer="logarithmicDepthBuffer: true; precision: medium;">
     
-    <!-- Hiroマーカー -->
+    <!-- カスタムマーカー（pattern.patt ファイルを使用） -->
     <a-marker 
-      preset="hiro"
-      id="hiro-marker"
+      type="pattern"
+      url="pattern.patt"
+      id="custom-marker"
       raycaster="objects: .clickable"
       emitevents="true"
       cursor="fuse: false; rayOrigin: mouse;">
@@ -108,17 +109,17 @@
 
   <script>
     // マーカー検出イベント
-    const marker = document.querySelector('#hiro-marker');
+    const marker = document.querySelector('#custom-marker');
     const statusElem = document.getElementById('marker-status');
     
     marker.addEventListener('markerFound', () => {
-      console.log('マーカーが検出されました');
+      console.log('カスタムマーカーが検出されました');
       statusElem.textContent = '✅ 検出中';
       statusElem.style.color = '#0f0';
     });
     
     marker.addEventListener('markerLost', () => {
-      console.log('マーカーが見失われました');
+      console.log('カスタムマーカーが見失われました');
       statusElem.textContent = '❌ 未検出';
       statusElem.style.color = '#f00';
     });
